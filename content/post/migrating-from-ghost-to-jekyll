@@ -1,0 +1,109 @@
++++
+layout: post
+title = "Migrating From Ghost To Jekyll"
+date = "2016-03-12"
+
++++
+
+For the past few months, this (sporadically) updated blog has maintained using Ghost. Before I started using Ghost, I start blogging Wordpress.
+A combination of wanting to explore a different tool and the prospect of having my own .io domain motivated me to explore other options.
+A friend of mine runs Ghost on a digital ocean droplet and spoke highly of it, so I decided to give it go. I would host a Ghost instance on my
+local machine, and then using buster, generate at static site from the resultant pages. After the static site was
+generated, I would simply push it to github for hosting. At first I was quite enamored with this solution. Ghost is a really neat
+blogging platform with a burgeoning user base comprising of technical people who post solutions to many different problems you might
+encounter or scenario that you want to accommodate. However, with time, I became a bit disillusioned with the *particular* method
+I used to maintain this blog. Even when I automated the "build" process with a script, I still felt as though as I was using
+a broadsword to cut an apple, and it made me feel reluctant to type up even simple posts.
+
+Aside from wanting to contribute what I could to the open source and reserach community that has been a wellspring of knowledge for
+me over the years, I wanted to practice writing. [As University of Utah's Prof. Mattew Might has noted](http://matt.might.net/articles/productivity-tips-hints-hacks-tricks-for-grad-students-academics/#philosophy), one of the best ways to be productive is
+to minimize the costs associated and make what you are trying to make a habit the path of least resistence. To that end, I started looking for more traditional static site generators as alternatives.
+I looked at [Hugo](https://gohugo.io/), but found the community really small when compared to other static site generators. Being a fan of Haskell,  I glanced at
+[Hakyll](https://jaspervdj.be/hakyll/), but likewise found the community small. Moreover, while the themes I found for Hakyll were nice, none of them suited what I needed, and writing
+my own would take up time I would rather spend on something other than fiddling around with CSS. Eventually, I decided to go with Jekyll, one of the most popular static site generators out there.
+
+Even though I didn't have many posts published on my blogs in the past, I rather that I didn't have to type them over manually. Luckily, 
+Ghost allows you to export your posts as a JSON document. All I had to do was write code to parse the JSON document, extract the information
+and content about my posts, and generate from that information .md files for each of my posts in a format acceptable to Jekyll.
+
+
+There was a lot of information in the exported JSON document. However, all the necessary information for us to port a post
+across to Jekyll was contained in a single subdocument. To generate .md files for our posts, we first need to grab the array of these
+post-describing subdocuments.
+{% highlight python %}
+
+# filename retrieved from command line
+json_file = open(filename, 'r')
+contents = json.load(json_file)
+json_file.close()
+posts = contents['db'][0]['data']['posts'] 
+
+
+{% endhighlight %}
+
+From there, I task is pretty simple. Each post document contains a title field, a markdown field (with the post's contents), and
+a timestamp. Using the timestamp, it is pretty trivial to get the date. Moreover, each post has a status field. If you just want
+to grab the posts that have been published, you can just check to ensure that said field is not set to "draft"
+
+{% highlight python %}
+for post in posts:
+    if post['status'].strip().upper() != "DRAFT":
+            title = post['title']
+            markdown = post['markdown'].encode('utf8')
+            timestamp = float(post['updated_at']) / 1000.00
+            date = datetime.fromtimestamp(timestamp)
+            date_of_publication = date.isoformat()
+{% endhighlight %}
+
+The title, markdown, and date_of_publication variables are all used to generate the content of the markdown files.
+{% highlight python %}
+
+def write_post(title, markdown, date):
+    post = '---\n'
+    post += 'layout: post\n'
+    post += 'title: {0}\ndate: {1}\n---\n'.format(title, date)
+    post += '\n{0}'.format(markdown)
+    return post
+
+{% endhighlight %}
+
+The title for the generated markdown file also needs to be in a specific format.
+
+{% highlight python %}
+
+def generate__title(title, date):
+    date_part = "{0}-{1}-{2}".format(date.year, date.month, date.day)
+    strings = title.split()
+    strings = map(lambda st: ''.join(ch for ch in st if ch.isalpha()).lower(), strings )
+    strings = '-'.join(strings)
+    final_title = "{0}-{1}".format(date_part, strings)
+    return final_title
+
+{% endhighlight %}
+
+
+Using the above all together, we have the following code that does the post generation:
+
+
+{% highlight python %}
+
+# directory supplied via command line
+for post in posts:
+    if post['status'].strip().upper() != "DRAFT":
+            title = post['title']
+            markdown = post['markdown'].encode('utf8')
+            timestamp = float(post['updated_at']) / 1000.00
+            date = datetime.fromtimestamp(timestamp)
+            date_of_publication = date.isoformat()
+            cleaned_title = generate_title(title, date)
+            loc = directory + '/' + cleaned_title + '.md'
+            with open(loc, 'w') as f:
+                f.write(write_post(title, markdown, date_of_publication))
+
+{% endhighlight %}
+
+The following gist can be run from command line:
+
+<script src="https://gist.github.com/InzamamRahaman/b65186e22c3a84f5be7b.js"></script>
+
+Anywho, bye for now :)
